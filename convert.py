@@ -120,18 +120,24 @@ def parse_folder(i, d, args):
     files = os.listdir(os.path.join(args.data_dir, d))
     files.sort()
     for j, f in enumerate(files):
-        # Every one in two is the mask
+        # Every one in two is the mask/label file
         if j % 2 != 0:
             continue
-        print(j)
+        if j % 1000 == 0:
+            print(f"{j}/{len(files)}")
         try:
             prefix = "test" if i % int((1 - args.train_test_ratio) * 100) == 0 else "train"
-            img = Image.open(os.path.join(args.data_dir, d, f))
+            img = Image.open(os.path.join(args.data_dir, d, f)).convert('RGB')
             img.thumbnail((1200, 1200))
             img.copy().save(os.path.join(args.output_dir, d, f"{prefix}_{i}_{j}_0.jpg"))
-            mask = Image.open(os.path.join(args.data_dir, d, f[:-4] + '_mask.png'))
-            mask.thumbnail((1200, 1200))
-            x, y, w, h = convert(img.size, bbox2(np.array(mask)))
+            try:
+                mask = Image.open(os.path.join(args.data_dir, d, f[:-4] + '_mask.png'))
+                mask.thumbnail((1200, 1200))
+                x, y, w, h = convert(img.size, bbox2(np.array(mask)))
+            except Exception as inner_ex:
+                # Probably a .txt mask
+                with open(os.path.join(args.data_dir, d, f[:-4] + '.txt')) as f:
+                    _, x, y, w, h = f.read().replace('\n', '').split(' ')
 
             with open(os.path.join(args.output_dir, d, f"{prefix}_{i}_{j}_0.txt"), 'w') as f:
                 f.write(f"{i} {x} {y} {w} {h}\n")
@@ -143,16 +149,16 @@ def parse_folder(i, d, args):
             # Time to create some augmentations
             augmenter = build_augmenter(random.randint(0, 100000000))
             # Converting to OpenCV2 format
-            img = np.array(img)[:, :, ::-1].copy() 
+            img = np.array(img)[:, :, ::-1].copy()
             res = augmenter.augment_images([img for _ in range(args.aug_factor)])
             for k, ai in enumerate(res):
                 Image.fromarray(ai[:, :, ::-1]).save(os.path.join(args.output_dir, d, f"train_{i}_{j}_{k + 1}.jpg"))
                 with open(os.path.join(args.output_dir, d, f"train_{i}_{j}_{k + 1}.txt"), 'w') as f:
                     f.write(f"{i} {x} {y} {w} {h}\n")
-                
+
         # Some images are odd and I'd rather not spend time fixing them
         except Exception as ex:
-            print(ex)
+            print(f"Exception thrown: {ex}")
 
 def main():
     """
@@ -175,8 +181,7 @@ def main():
         for d in os.listdir(args.output_dir):
             print(d)
             for i, f in enumerate(os.listdir(os.path.join(args.output_dir, d))):
-                print(f)
-                if f[-3:] != 'jpg':
+                if f[-3:] not in ('jpg', 'png'):
                     continue
                 if f[0:4] == 'test':
                     test_file.write(os.path.join(args.output_dir, d, f) + "\n")
