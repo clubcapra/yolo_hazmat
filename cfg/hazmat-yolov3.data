@@ -1,4 +1,4 @@
-classes = 8
+classes = 13
 train = train.txt
 valid = test.txt
 names = cfg/hazmat-yolov3.names
